@@ -1,0 +1,26 @@
+[application]
+name = "smugmug_syncer_viewer"
+# Default platform for `dx serve` / `dx bundle`.  Use `--platform web` for the PWA build.
+default_platform = "desktop"
+out_dir = "dist"
+asset_dir = "assets"
+
+[web.app]
+title = "SmugMug Archive Viewer"
+
+[web.watcher]
+reload_html = true
+watch_path = ["src", "assets"]
+
+[web.resource]
+style = []
+script = []
+
+[web.resource.dev]
+script = []
+
+[bundle]
+identifier = "dev.c13s.smugmug-syncer-viewer"
+publisher = "Craig Hamilton"
+icon = ["public/icons/icon-512.png"]
+short_description = "Browse a smugmug_syncer archive offline"
