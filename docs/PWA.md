@@ -9,6 +9,7 @@ The UI and the archive index are platform neutral. Only `src/platform/` differs:
 | Media URLs | `/media/<gen>/...`, served by an asset handler | `<base>/artifacts/<key>`, served by the web server |
 | Thumbnails | Generated and cached on disk | Full image, scaled by CSS |
 | Parquet (video info, EXIF) | Read with the `parquet` crate | Not read yet (see below) |
+| File's own EXIF, video codecs | Read from the artifact | Not read yet (see below) |
 
 ## Build
 
@@ -71,6 +72,10 @@ cd webroot && python3 -m http.server 8765 --bind 127.0.0.1
 2. **Thumbnails.** The grid loads full-size images. For large albums, pre-generate thumbnails
    on the server (for example with the desktop thumbnail code as a CLI) and point `thumb_url`
    in `src/platform/web.rs` at them.
-3. **Local folders without a server.** Chromium's File System Access API
+3. **The artifact's own EXIF and video codecs.** `load_file_info` returns nothing on the web.
+   `src/archive/mp4.rs` has no dependencies and builds for wasm. It needs `Read + Seek`,
+   which a reader backed by HTTP range requests can provide. `kamadak-exif` is pure Rust too,
+   and only needs the first 64 KB or so of a JPEG.
+4. **Local folders without a server.** Chromium's File System Access API
    (`showDirectoryPicker`) could read an archive folder directly. That would be a third
    implementation of the `platform` functions.

@@ -4,7 +4,10 @@ use dioxus::prelude::*;
 
 use super::{AppState, Route, browse::Missing, use_archive};
 use crate::{
-    archive::{human_size, short_date},
+    archive::{
+        file_info::{MergedField, Source, TrackKind, merge_fields, summarize},
+        human_size, short_date,
+    },
     platform,
 };
 
@@ -125,40 +128,59 @@ fn InfoPanel(album_key: String, image_key: String) -> Element {
         .as_ref()
         .and_then(|v| v.get(&image_key).cloned());
     let video = archive.videos.get(&image_key).cloned();
+    let video_ext = image
+        .is_video
+        .then(|| video.as_ref().map_or("mp4".to_string(), |v| v.ext.clone()));
 
-    let mut exif = use_signal(|| None::<Result<Vec<(String, String)>, String>>);
+    // What the file itself records (EXIF, or a video's codecs), read when the panel opens.
+    // The panel is keyed by image, so this never needs to re-run.
+    let file_info = use_resource({
+        let (location, key) = (archive.location.clone(), image_key.clone());
+        move || {
+            let (location, key, ext) = (location.clone(), key.clone(), video_ext.clone());
+            async move {
+                platform::load_file_info(location, key, ext)
+                    .await
+                    .map_err(|e| format!("{e:#}"))
+            }
+        }
+    });
+    let (file, file_error) = match &*file_info.read() {
+        Some(Ok(info)) => (Some(info.clone()), None),
+        Some(Err(err)) => (None, Some(err.clone())),
+        None => (None, None),
+    };
+
+    // SmugMug's full metadata, loaded on request and merged with the file's fields
+    let mut smugmug_fields = use_signal(|| None::<Result<Vec<(String, String)>, String>>);
     let location = archive.location.clone();
     let source_file = details.as_ref().and_then(|v| v.source_file.clone());
     let key = image_key.clone();
-    let load_exif = move |_| {
+    let load_all = move |_| {
         let (location, key, source_file) = (location.clone(), key.clone(), source_file.clone());
         async move {
             let result = platform::load_metadata_json(location, key, source_file)
                 .await
                 .map_err(|e| format!("{e:#}"))
                 .map(|json| json.map(|v| flatten_json(&v)).unwrap_or_default());
-            exif.set(Some(result));
+            smugmug_fields.set(Some(result));
         }
     };
 
-    let dimensions = details
-        .as_ref()
-        .and_then(|d| Some((d.original_width?, d.original_height?)))
+    let summary = summarize(details.as_ref(), file.as_ref());
+    let taken_label = if image.is_video { "Recorded" } else { "Taken" };
+    let dimensions = summary
+        .dimensions
         .or_else(|| video.as_ref().and_then(|v| Some((v.width?, v.height?))));
-    let camera = details.as_ref().and_then(|d| {
-        let parts: Vec<&str> = [d.make.as_deref(), d.model.as_deref()]
-            .into_iter()
-            .flatten()
-            .collect();
-        (!parts.is_empty()).then(|| parts.join(" "))
-    });
-    let gps = details
-        .as_ref()
-        .and_then(|d| Some((d.latitude?, d.longitude?)));
     let size = details
         .as_ref()
         .and_then(|d| d.original_size)
         .or(image.archived_size);
+    let media = file.as_ref().and_then(|f| f.media.clone());
+    let duration = video
+        .as_ref()
+        .and_then(|v| v.duration.clone())
+        .or_else(|| media.as_ref()?.duration_secs.map(|v| format!("{v:.1}")));
 
     rsx! {
         aside { class: "info",
@@ -168,8 +190,8 @@ fn InfoPanel(album_key: String, image_key: String) -> Element {
             }
             dl {
                 Row { label: "File", value: image.file_name.clone() }
-                if let Some(taken) = details.as_ref().and_then(|d| d.date_time_original.clone()) {
-                    Row { label: "Taken", value: short_date(&taken) }
+                if let Some(taken) = &summary.taken {
+                    Row { label: taken_label, value: short_date(taken) }
                 }
                 if let Some(uploaded) = &image.date_time_uploaded {
                     Row { label: "Uploaded", value: short_date(uploaded) }
@@ -180,15 +202,34 @@ fn InfoPanel(album_key: String, image_key: String) -> Element {
                 if let Some(size) = size {
                     Row { label: "Size", value: human_size(size) }
                 }
-                if let Some(video) = &video {
-                    if let Some(duration) = &video.duration {
-                        Row { label: "Duration", value: format!("{duration} s") }
+                if let Some(duration) = duration {
+                    Row { label: "Duration", value: format!("{duration} s") }
+                }
+                if let Some(media) = &media {
+                    for track in media.tracks.iter() {
+                        Row {
+                            label: match track.kind {
+                                TrackKind::Video => "Video",
+                                TrackKind::Audio => "Audio",
+                                TrackKind::Other(_) => "Track",
+                            },
+                            value: track.summary(),
+                        }
+                    }
+                    if media.track(TrackKind::Audio).is_none() {
+                        Row { label: "Audio", value: "None".to_string() }
                     }
                 }
-                if let Some(camera) = camera {
-                    Row { label: "Camera", value: camera }
+                if let Some(camera) = &summary.camera {
+                    Row { label: "Camera", value: camera.clone() }
                 }
-                if let Some((lat, lon)) = gps {
+                if let Some(lens) = &summary.lens {
+                    Row { label: "Lens", value: lens.clone() }
+                }
+                if let Some(exposure) = &summary.exposure {
+                    Row { label: "Exposure", value: exposure.clone() }
+                }
+                if let Some((lat, lon)) = summary.location {
                     dt { "Location" }
                     dd {
                         a {
@@ -206,6 +247,9 @@ fn InfoPanel(album_key: String, image_key: String) -> Element {
                 if image.hidden {
                     Row { label: "Hidden", value: "Yes".to_string() }
                 }
+            }
+            if let Some(err) = file_error {
+                p { class: "error small", "Couldn't read the file: {err}" }
             }
             if !image.keyword_array.is_empty() {
                 h3 { "Keywords" }
@@ -232,25 +276,33 @@ fn InfoPanel(album_key: String, image_key: String) -> Element {
                     }
                 }
             }
-            match &*exif.read() {
+            match &*smugmug_fields.read() {
                 None => rsx! {
-                    if platform::HAS_FOLDER_PICKER {
-                        button { class: "secondary", onclick: load_exif, "Show all metadata" }
+                    if platform::HAS_FULL_METADATA {
+                        button { class: "secondary", onclick: load_all, "Show all metadata" }
                     }
                 },
                 Some(Err(err)) => rsx! { p { class: "error", "{err}" } },
-                Some(Ok(fields)) if fields.is_empty() => rsx! {
-                    p { class: "muted small", "SmugMug had no further metadata for this file." }
-                },
-                Some(Ok(fields)) => rsx! {
-                    h3 { "Metadata" }
-                    dl { class: "exif",
-                        for (k, v) in fields.iter() {
-                            dt { "{k}" }
-                            dd { "{v}" }
+                Some(Ok(smugmug)) => {
+                    let file_fields = file.as_ref().map_or(&[][..], |f| f.fields.as_slice());
+                    let merged = merge_fields(smugmug, file_fields);
+                    rsx! {
+                        h3 { "Metadata" }
+                        p { class: "muted small legend",
+                            span { class: "source smugmug", "S" } " SmugMug  "
+                            span { class: "source file", "F" } " file  "
+                            span { class: "source both", "S+F" } " both agree"
+                        }
+                        if merged.is_empty() {
+                            p { class: "muted small", "Neither SmugMug nor the file has any metadata." }
+                        }
+                        dl { class: "exif",
+                            for field in merged {
+                                MetadataRow { field }
+                            }
                         }
                     }
-                },
+                }
             }
         }
     }
@@ -264,13 +316,35 @@ fn Row(label: &'static str, value: String) -> Element {
     }
 }
 
-/// Turns the stored metadata JSON object into sorted key/value pairs for display
+#[component]
+fn MetadataRow(field: MergedField) -> Element {
+    let (class, tag) = match field.source {
+        Source::SmugMug => ("source smugmug", "S"),
+        Source::File => ("source file", "F"),
+        Source::Both => ("source both", "S+F"),
+    };
+    rsx! {
+        dt { "{field.name}" }
+        dd {
+            span { class, "{tag}" }
+            "{field.value}"
+            if let Some(file_value) = &field.file_value {
+                div { class: "file-value",
+                    span { class: "source file", "F" }
+                    "{file_value}"
+                }
+            }
+        }
+    }
+}
+
+/// Turns the stored metadata JSON object into key/value pairs, dropping empty values
 fn flatten_json(json: &str) -> Vec<(String, String)> {
     let Ok(serde_json::Value::Object(map)) = serde_json::from_str(json) else {
         return vec![("metadata".to_string(), json.to_string())];
     };
-    let mut fields: Vec<_> = map
-        .into_iter()
+    map.into_iter()
+        .filter(|(k, _)| k != "Uri")
         .map(|(k, v)| {
             let v = match v {
                 serde_json::Value::String(s) => s,
@@ -279,7 +353,5 @@ fn flatten_json(json: &str) -> Vec<(String, String)> {
             (k, v)
         })
         .filter(|(_, v)| !v.is_empty())
-        .collect();
-    fields.sort();
-    fields
+        .collect()
 }

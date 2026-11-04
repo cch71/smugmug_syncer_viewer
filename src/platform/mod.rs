@@ -5,6 +5,7 @@
 //! - `launch`: start Dioxus with platform specific configuration
 //! - `initial_location` / `remember_location` / `pick_location`: choose the archive
 //! - `load_archive`, `load_details`, `load_metadata_json`: read the archive's metadata
+//! - `load_file_info`: read the EXIF or video codecs recorded in an artifact file itself
 //! - `thumb_url`, `image_url`, `video_url`: URLs the webview loads media from
 //! - `use_media_handler`: hook that serves media (desktop only; a no-op on the web)
 
@@ -23,3 +24,6 @@ compile_error!("enable either the `desktop` or `web` feature");
 
 /// True if the platform can open a native folder picker
 pub const HAS_FOLDER_PICKER: bool = cfg!(feature = "desktop");
+
+/// True if the platform reads the parquet metadata and the artifacts' own EXIF/codecs
+pub const HAS_FULL_METADATA: bool = cfg!(feature = "desktop");

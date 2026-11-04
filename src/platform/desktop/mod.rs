@@ -1,6 +1,7 @@
 //! Desktop back end: reads the archive straight from disk and serves its media to the webview
 //! through the `/media/...` asset handler.
 
+mod exif;
 mod media;
 mod parquet_rows;
 mod settings;
@@ -15,8 +16,9 @@ use dioxus::prelude::*;
 
 use crate::archive::{
     Archive, DetailsMap,
+    file_info::{FileInfo, media_fields},
     model::{ImageDetails, VideoInfo},
-    paths,
+    mp4, paths,
 };
 
 pub use media::{image_url, thumb_url, use_media_handler, video_url};
@@ -146,6 +148,32 @@ pub async fn load_metadata_json(
     .await
 }
 
+/// Reads what the artifact file itself records: EXIF for images, or for videos (when
+/// `video_ext` is given) the container's tracks and codecs
+pub async fn load_file_info(
+    location: String,
+    image_key: String,
+    video_ext: Option<String>,
+) -> Result<FileInfo> {
+    run_blocking(move || {
+        let root = expand_home(&location);
+        let Some(ext) = video_ext else {
+            return exif::read_file_info(&root.join(paths::image_artifact(&image_key)));
+        };
+        let path = root.join(paths::video_artifact(&image_key, &ext));
+        let file =
+            std::fs::File::open(&path).with_context(|| format!("{} not found", path.display()))?;
+        let media = mp4::probe(&mut std::io::BufReader::new(file))
+            .with_context(|| format!("reading {}", path.display()))?;
+        Ok(FileInfo {
+            fields: media_fields(&media),
+            media: Some(media),
+            ..Default::default()
+        })
+    })
+    .await
+}
+
 fn load_video_info(dir: &Path) -> Result<HashMap<String, VideoInfo>> {
     let mut videos = HashMap::new();
     parquet_rows::for_each_row(
@@ -228,11 +256,114 @@ mod tests {
             let json = load_metadata_json(location, key.clone(), d.source_file.clone())
                 .await
                 .unwrap();
+            eprintln!("{key}: {d:?}\nmetadata json in {:?}:", start.elapsed());
+            eprintln!("{}", json.unwrap_or_default());
+        }
+    }
+}
+
+#[cfg(test)]
+mod file_info_tests {
+    use super::*;
+    use crate::archive::file_info::merge_fields;
+
+    /// Probes every video in the archive and merges one image's EXIF with SmugMug's, when
+    /// `SMUGMUG_ARCHIVE` is set
+    #[tokio::test(flavor = "multi_thread")]
+    async fn file_info_from_env_archive() {
+        let Ok(location) = std::env::var("SMUGMUG_ARCHIVE") else {
+            eprintln!("SMUGMUG_ARCHIVE not set; skipping");
+            return;
+        };
+        let archive = load_archive(location.clone()).await.unwrap();
+
+        let start = std::time::Instant::now();
+        let mut codecs = std::collections::BTreeMap::<String, usize>::new();
+        let mut failures = Vec::new();
+        for (key, info) in &archive.videos {
+            match load_file_info(location.clone(), key.clone(), Some(info.ext.clone())).await {
+                Ok(file) => {
+                    let media = file.media.unwrap();
+                    let names: Vec<String> = media.tracks.iter().map(|t| t.summary()).collect();
+                    let video = media
+                        .tracks
+                        .iter()
+                        .find(|t| t.kind == crate::archive::file_info::TrackKind::Video);
+                    let audio = media
+                        .tracks
+                        .iter()
+                        .find(|t| t.kind == crate::archive::file_info::TrackKind::Audio);
+                    *codecs
+                        .entry(format!(
+                            "{} + {}",
+                            video.map_or("no video", |t| t.codec.as_str()),
+                            audio.map_or("no audio", |t| t.codec.as_str())
+                        ))
+                        .or_default() += 1;
+                    if key == "Vq8j9FG" || key == "npvpSC4" {
+                        eprintln!("{key}: {:?} {names:?}", media.duration_secs);
+                    }
+                }
+                Err(err) => failures.push(format!("{key}: {err:#}")),
+            }
+        }
+        eprintln!(
+            "probed {} videos in {:?}",
+            archive.videos.len(),
+            start.elapsed()
+        );
+        for (combo, count) in &codecs {
+            eprintln!("  {count:4}  {combo}");
+        }
+        for failure in failures.iter().take(10) {
+            eprintln!("  failed {failure}");
+        }
+        assert!(
+            failures.len() * 20 < archive.videos.len().max(1),
+            "too many failures"
+        );
+
+        let details = load_details(location.clone()).await.unwrap();
+        let (key, d) = details.iter().find(|(_, d)| d.lens_hint()).unwrap();
+        let file = load_file_info(location.clone(), key.clone(), None)
+            .await
+            .unwrap();
+        let json = load_metadata_json(location, key.clone(), d.source_file.clone())
+            .await
+            .unwrap()
+            .unwrap();
+        let smugmug: Vec<(String, String)> = match serde_json::from_str(&json).unwrap() {
+            serde_json::Value::Object(map) => map
+                .into_iter()
+                .map(|(k, v)| (k, v.as_str().map_or(v.to_string(), str::to_string)))
+                .filter(|(_, v)| !v.is_empty())
+                .collect(),
+            _ => vec![],
+        };
+        eprintln!(
+            "\n{key}: summary {:?}",
+            crate::archive::file_info::summarize(Some(d), Some(&file))
+        );
+        for field in merge_fields(&smugmug, &file.fields) {
             eprintln!(
-                "{key}: {d:?}\nmetadata json {} bytes in {:?}",
-                json.map_or(0, |v| v.len()),
-                start.elapsed()
+                "  {:?} {} = {}{}",
+                field.source,
+                field.name,
+                field.value,
+                field
+                    .file_value
+                    .map(|v| format!("   (file: {v})"))
+                    .unwrap_or_default()
             );
+        }
+    }
+
+    trait LensHint {
+        fn lens_hint(&self) -> bool;
+    }
+    impl LensHint for ImageDetails {
+        fn lens_hint(&self) -> bool {
+            self.make.as_deref() == Some("Apple") && self.latitude.is_some()
         }
     }
 }

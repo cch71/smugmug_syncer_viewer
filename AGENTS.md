@@ -31,6 +31,11 @@ archives created by `smugmug_syncer`. See [README.md](README.md) for usage and
 
 - Archive-relative paths come only from `src/archive/paths.rs`.
 - Read parquet only through `platform/desktop/parquet_rows.rs`.
+- Read EXIF from files only through `platform/desktop/exif.rs`, and video containers only
+  through `src/archive/mp4.rs`.
+- Merge SmugMug's metadata with a file's through `src/archive/file_info.rs`. When a newly read
+  EXIF tag means the same as a SmugMug metadata key, add it to `smugmug_name` so the two show
+  as one row.
 
 ### Keep one copy of each image file
 

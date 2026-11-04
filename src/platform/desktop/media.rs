@@ -270,7 +270,7 @@ fn make_thumbnail(data: &[u8], size: u32) -> Result<Vec<u8>> {
         }
         _ => image::load_from_memory(data),
     }?;
-    let image = apply_orientation(image.thumbnail(size, size), exif_orientation(data));
+    let image = apply_orientation(image.thumbnail(size, size), super::exif::orientation(data));
 
     let mut out = Vec::new();
     JpegEncoder::new_with_quality(&mut out, 80).encode_image(&image.to_rgb8())?;
@@ -308,17 +308,6 @@ fn decode_jpeg_scaled(data: &[u8], size: u32) -> Result<DynamicImage> {
         jpeg_decoder::PixelFormat::L16 => None,
     };
     image.context("unsupported jpeg pixel format")
-}
-
-fn exif_orientation(data: &[u8]) -> u32 {
-    exif::Reader::new()
-        .read_from_container(&mut Cursor::new(data))
-        .ok()
-        .and_then(|exif| {
-            exif.get_field(exif::Tag::Orientation, exif::In::PRIMARY)
-                .and_then(|v| v.value.get_uint(0))
-        })
-        .unwrap_or(1)
 }
 
 fn apply_orientation(image: DynamicImage, orientation: u32) -> DynamicImage {

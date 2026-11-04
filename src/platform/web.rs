@@ -8,7 +8,7 @@ use std::{collections::HashMap, sync::Mutex};
 use anyhow::{Result, anyhow, bail};
 use dioxus::prelude::*;
 
-use crate::archive::{Archive, DetailsMap, paths};
+use crate::archive::{Archive, DetailsMap, file_info::FileInfo, paths};
 
 const DEFAULT_LOCATION: &str = "archive";
 
@@ -65,6 +65,15 @@ pub async fn load_metadata_json(
     _source_file: Option<String>,
 ) -> Result<Option<String>> {
     Ok(None)
+}
+
+/// Reading the artifact's own EXIF / codecs needs ranged fetches; not implemented on the web yet
+pub async fn load_file_info(
+    _location: String,
+    _image_key: String,
+    _video_ext: Option<String>,
+) -> Result<FileInfo> {
+    Ok(FileInfo::default())
 }
 
 /// Resolves the location against the page URL, so media URLs keep working when the router

@@ -3,7 +3,13 @@
 //! Everything here is platform neutral: it is built from the raw bytes of the archive's files,
 //! which [`crate::platform`] reads from disk (desktop) or over HTTP (web/PWA).
 
+// Reading files' own EXIF/codecs is desktop only for now (see docs/PWA.md), so parts of these
+// are unused in the web build
+#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
+pub mod file_info;
 pub mod model;
+#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
+pub mod mp4;
 pub mod paths;
 
 use std::{collections::HashMap, io::Read, sync::Arc};
