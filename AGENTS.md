@@ -49,6 +49,21 @@ Don't keep the same image (icons, logos, placeholders) in more than one place, s
 - Render generated sizes from one source (`docs/icon.svg`) and replace the old files; don't add
   variants alongside them.
 
+### CI, releases and dependencies
+
+- Releases go through `cargo release` (`release.toml`) and the tag-triggered
+  `.github/workflows/release.yml`. Keep `publish = false`: nothing goes to crates.io.
+- Record user-visible changes under `## [Unreleased]` in `CHANGELOG.md`. The release notes
+  are taken from it.
+- Pin third-party GitHub Actions to a full commit SHA with the version in a comment. Keep
+  workflow `permissions` minimal (read by default, write only on the job that needs it), and
+  check out with `persist-credentials: false`.
+- When changing the `dioxus` version, change `DIOXUS_CLI_VERSION` in the workflows to match.
+- New dependencies must pass `cargo deny check`. Add a license to `deny.toml` only if it is
+  permissive or file-level copyleft.
+- Put setup that several workflows need in `.github/actions/setup-build` rather than
+  copying steps between them.
+
 ## Checks before finishing
 
 - `cargo clippy --release` and
@@ -56,3 +71,6 @@ Don't keep the same image (icons, logos, placeholders) in more than one place, s
   new warnings.
 - `cargo test --release`. When an archive is available, also run it with `SMUGMUG_ARCHIVE` set.
 - `dx build --platform web --release` still succeeds.
+- `cargo deny check` passes.
+- After editing workflows: `actionlint` and `zizmor --offline .github` report no new
+  findings.

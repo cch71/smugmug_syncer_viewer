@@ -1,0 +1,42 @@
+# cargo-deny configuration: https://embarkstudios.github.io/cargo-deny/
+# Run locally with `cargo deny check`.
+
+[graph]
+# Check both the desktop and the web/PWA dependency trees
+all-features = true
+
+[advisories]
+# Unmaintained crates are reported for direct dependencies only; transitive ones (mostly the
+# GTK3 bindings under wry/tao) are out of our hands
+unmaintained = "workspace"
+ignore = []
+
+[licenses]
+confidence-threshold = 0.9
+# Permissive licenses, plus MPL-2.0 (file-level copyleft: only changes to those files would
+# have to be shared) used by the CSS parser under wry
+allow = [
+  "MIT",
+  "MIT-0",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "0BSD",
+  "CC0-1.0",
+  "Unlicense",
+  "Unicode-3.0",
+  "NCSA",
+  "MPL-2.0",
+]
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

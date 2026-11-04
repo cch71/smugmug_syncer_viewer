@@ -22,5 +22,11 @@ script = []
 [bundle]
 identifier = "dev.c13s.smugmug-syncer-viewer"
 publisher = "Craig Hamilton"
-icon = ["public/icons/icon-512.png"]
+icon = ["public/icons/icon-512.png", "public/icons/icon.ico"]
 short_description = "Browse a smugmug_syncer archive offline"
+category = "Photography"
+copyright = "Copyright (c) 2026 Craig Hamilton and Contributors"
+
+[bundle.deb]
+# Dioxus desktop renders with the system WebKitGTK
+depends = ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libxdo3"]
