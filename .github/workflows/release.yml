@@ -12,6 +12,18 @@ on:
       tag:
         description: Existing tag to (re)build the release for, e.g. v0.1.0
         required: true
+      platforms:
+        description: >-
+          Platforms to build, comma separated (windows-x86_64, linux-x86_64, macos-aarch64,
+          macos-x86_64).  Empty builds all of them.
+        required: false
+        default: ""
+      reuse-packages-from-run:
+        description: >-
+          ID of an earlier Release run for the same tag whose packages should be attached too,
+          e.g. to rebuild only the platform that failed.  Empty attaches only this run's.
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -26,26 +38,51 @@ env:
   TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
+  plan:
+    name: Choose platforms
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - id: matrix
+        env:
+          PLATFORMS: ${{ github.event.inputs.platforms }}
+          REUSE_RUN: ${{ github.event.inputs.reuse-packages-from-run }}
+        run: |
+          # linux-x86_64 is pinned to the oldest Ubuntu we support: the .deb and .AppImage need a
+          # glibc at least as new as the build machine's (2.39 on 24.04).  Don't use
+          # ubuntu-latest, which would silently raise that minimum.
+          all='[
+            {"name": "windows-x86_64", "os": "windows-latest",
+             "packages": "--package-types msi --package-types nsis"},
+            {"name": "linux-x86_64", "os": "ubuntu-24.04",
+             "packages": "--package-types deb", "appimage": true},
+            {"name": "macos-aarch64", "os": "macos-latest",
+             "packages": "--package-types macos --package-types dmg"},
+            {"name": "macos-x86_64", "os": "macos-15-intel",
+             "packages": "--package-types macos --package-types dmg"}
+          ]'
+          if [[ -n "$REUSE_RUN" && ! "$REUSE_RUN" =~ ^[0-9]+$ ]]; then
+            echo "::error::reuse-packages-from-run must be a numeric run ID"
+            exit 1
+          fi
+          wanted=$(jq -cn --arg p "$PLATFORMS" '$p | gsub("\\s"; "") | split(",") | map(select(. != ""))')
+          unknown=$(jq -cn --argjson all "$all" --argjson w "$wanted" '$w - ($all | map(.name))')
+          if [ "$unknown" != "[]" ]; then
+            echo "::error::Unknown platforms: $unknown"
+            exit 1
+          fi
+          matrix=$(jq -cn --argjson all "$all" --argjson w "$wanted" \
+            '{include: [$all[] | select(($w | length) == 0 or (.name | IN($w[])))]}')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          jq . <<< "$matrix"
+
   build:
     name: Build ${{ matrix.name }}
+    needs: plan
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: windows-x86_64
-            os: windows-latest
-            packages: --package-types msi --package-types nsis
-          - name: linux-x86_64
-            # The oldest supported Ubuntu, so the .deb/.AppImage run on older glibc versions
-            os: ubuntu-22.04
-            packages: --package-types deb
-            appimage: true
-          - name: macos-aarch64
-            os: macos-latest
-            packages: --package-types macos --package-types dmg
-          - name: macos-x86_64
-            os: macos-15-intel
-            packages: --package-types macos --package-types dmg
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -65,6 +102,7 @@ jobs:
       # No build cache here: release builds start clean so a poisoned cache can't reach them
       - uses: ./.github/actions/setup-build
 
+      # The prebuilt Linux dx needs glibc 2.39+, so the Linux runner must be Ubuntu 24.04 or newer
       - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: dioxus-cli@${{ env.DIOXUS_CLI_VERSION }}
@@ -83,7 +121,8 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          sudo apt-get install -y --no-install-recommends libfuse2 file
+          # libfuse2 was renamed libfuse2t64 in Ubuntu 24.04
+          sudo apt-get install -y --no-install-recommends libfuse2t64 file
           dx bundle --release --platform desktop --package-types appimage --out-dir dist
 
       - name: Collect packages
@@ -118,17 +157,41 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # Only used to download packages from an earlier run (reuse-packages-from-run)
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.TAG }}
           persist-credentials: false
 
+      - name: Download packages from an earlier run
+        if: github.event.inputs.reuse-packages-from-run != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: packages-*
+          path: packages
+          merge-multiple: true
+          run-id: ${{ github.event.inputs.reuse-packages-from-run }}
+          github-token: ${{ github.token }}
+
+      # Downloaded second, so packages rebuilt by this run replace the earlier run's
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: packages-*
           path: packages
           merge-multiple: true
+
+      - name: Check every package is for this version
+        run: |
+          version="${TAG#v}"
+          ls -l packages
+          for file in packages/*; do
+            if [[ "$(basename "$file")" != *"_${version}_"* ]]; then
+              echo "::error::$file isn't a $version package"
+              exit 1
+            fi
+          done
 
       - name: Checksums
         working-directory: packages

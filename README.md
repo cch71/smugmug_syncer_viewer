@@ -160,6 +160,17 @@ A release can also be started by creating a `vX.Y.Z` tag from GitHub's **Draft a
 release** page, or by re-running the workflow manually with an existing tag. The tag has to
 match the `Cargo.toml` version, or the build stops.
 
+If only some platforms fail, fix the workflow on `main`, then rebuild just those platforms without
+retagging. Run **Release** manually from `main` with the existing tag, the failed platforms
+(for example `linux-x86_64`) and the failed run's ID (the number in its URL) as
+`reuse-packages-from-run`. The release then gets the new packages plus the ones the earlier
+run built:
+
+```bash
+gh workflow run release.yml --ref main -f tag=v1.0.0 -f platforms=linux-x86_64 \
+  -f reuse-packages-from-run=41970441857
+```
+
 The packages aren't code-signed, so Windows and macOS warn on first launch. The user manual
 explains how to get past the warning.
 

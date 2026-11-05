@@ -28,8 +28,12 @@ lists a checksum for each file if you want to verify your download.
 | Windows 10/11 | `SmugmugSyncerViewer_<version>_x64.msi` or `…_x64-setup.exe` | Run it |
 | macOS, Apple silicon (M1 and later) | `SmugmugSyncerViewer_<version>_aarch64.dmg` | Open the DMG and drag the app to Applications |
 | macOS, Intel | `SmugmugSyncerViewer_<version>_x86_64.dmg` | Same as above |
-| Debian, Ubuntu 22.04+ | `smugmug-syncer-viewer_<version>_amd64.deb` | `sudo apt install ./smugmug-syncer-viewer_*_amd64.deb` |
+| Ubuntu 24.04+, Debian 13+ | `smugmug-syncer-viewer_<version>_amd64.deb` | `sudo apt install ./smugmug-syncer-viewer_*_amd64.deb` |
 | Other Linux | `smugmug_syncer_viewer_<version>_x86_64.AppImage` (when provided) | `chmod +x` the file, then run it |
+
+Both Linux packages need glibc 2.39 or newer: Ubuntu 24.04, Linux Mint 22, Debian 13,
+Fedora 40 or later. They won't start on older systems such as Ubuntu 22.04 or Debian 12. Run
+`ldd --version` to see your glibc version.
 
 The `….app.zip` files hold the same macOS app as the DMG, for anyone who prefers a zip.
 
