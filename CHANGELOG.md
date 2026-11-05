@@ -7,6 +7,13 @@ the new version number.
 
 ## [Unreleased]
 
+### Added
+
+- Checks the archive's database version (`db_version` in `.smugmug_db/props.json`) using
+  semver rules. Archives with a different major version are refused with an explanation, and
+  archives from a newer compatible syncer open with a notice. Archives without a version are
+  treated as `1.0.0`. The home page shows the database version.
+
 ## [1.0.0] - 2026-11-05
 
 ### Added

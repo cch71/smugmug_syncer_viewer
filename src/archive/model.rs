@@ -93,6 +93,9 @@ impl Image {
 pub struct Props {
     pub album_node_last_sync_ts: Option<String>,
     pub image_map_last_sync_ts: Option<String>,
+    /// Semver version of the `.smugmug_db` layout (absent in archives written before the
+    /// syncer recorded it), see [`crate::archive::db_version`]
+    pub db_version: Option<String>,
 }
 
 /// Columns of the `image_metadata` parquet files (EXIF/IPTC SmugMug holds for each artifact).

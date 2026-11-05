@@ -15,6 +15,10 @@ archives created by `smugmug_syncer`. See [README.md](README.md) for usage and
   `PathFinder` and types.
 - Archive files may come from older or newer syncer versions, so give every serde field a
   default and ignore unknown keys.
+- The syncer's `DB_VERSION` (`db_version` in `props.json`) is checked by
+  `src/archive/db_version.rs`. When updating the viewer for a newer syncer layout, raise
+  `SUPPORTED_DB_VERSION` to match; for a new major version, keep reading the old one or
+  explain in the error why it can't.
 
 ### Keep the UI and the archive index platform neutral
 

@@ -5,6 +5,7 @@
 
 // Reading files' own EXIF/codecs is desktop only for now (see docs/PWA.md), so parts of these
 // are unused in the web build
+pub mod db_version;
 #[cfg_attr(not(feature = "desktop"), allow(dead_code))]
 pub mod file_info;
 pub mod model;
@@ -59,6 +60,9 @@ pub struct Archive {
     image_albums: HashMap<String, Vec<String>>,
     pub videos: HashMap<String, VideoInfo>,
     pub props: Props,
+    /// Set when the archive was written with a newer, still compatible, database version
+    /// (see [`db_version::check`]), for the UI to show
+    pub db_notice: Option<String>,
 }
 
 impl Archive {
@@ -71,6 +75,13 @@ impl Archive {
         props_json: Option<&[u8]>,
         videos: HashMap<String, VideoInfo>,
     ) -> Result<Self> {
+        // Checked first, so an archive this viewer can't read fails with a clear message
+        // rather than a parse error
+        let props: Props = props_json
+            .and_then(|v| serde_json::from_slice(v).ok())
+            .unwrap_or_default();
+        let db_notice = db_version::check(props.db_version.as_deref())?;
+
         let tree: TreeFile = serde_json::from_slice(&zstd_decode(tree_db)?)
             .context("parsing node_and_album_tree.db")?;
         let album_images: HashMap<String, Vec<Arc<Image>>> = match image_map_db {
@@ -83,9 +94,6 @@ impl Archive {
             }
             None => HashMap::new(),
         };
-        let props = props_json
-            .and_then(|v| serde_json::from_slice(v).ok())
-            .unwrap_or_default();
 
         let mut archive = Self {
             location,
@@ -97,6 +105,7 @@ impl Archive {
             image_albums: HashMap::new(),
             videos,
             props,
+            db_notice,
         };
         archive.build_tree(tree)?;
         archive.index_images();

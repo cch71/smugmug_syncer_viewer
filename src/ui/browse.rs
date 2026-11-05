@@ -22,6 +22,9 @@ pub fn HomeView() -> Element {
     rsx! {
         section { class: "page",
             h1 { "Archive" }
+            if let Some(notice) = &archive.db_notice {
+                p { class: "error small", "{notice}" }
+            }
             div { class: "stats",
                 Stat { label: "Folders", value: folders.to_string() }
                 Stat { label: "Albums", value: archive.album_count().to_string() }
@@ -33,7 +36,10 @@ pub fn HomeView() -> Element {
                     "Folders synced {short_date(ts)} UTC. "
                 }
                 if let Some(ts) = &props.image_map_last_sync_ts {
-                    "Image list synced {short_date(ts)} UTC."
+                    "Image list synced {short_date(ts)} UTC. "
+                }
+                if let Some(version) = &props.db_version {
+                    "Database version {version}."
                 }
             }
             NodeCards { indices: archive.nodes[archive.root].children.clone() }

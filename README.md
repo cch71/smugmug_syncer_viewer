@@ -82,7 +82,7 @@ The viewer mirrors those paths in [src/archive/paths.rs](src/archive/paths.rs).
 | --- | --- | --- |
 | `.smugmug_db/node_and_album_tree.db` | zstd JSON (`tree_ds` tree of SmugMug nodes and albums) | Folder/album tree |
 | `.smugmug_db/album_image_map.db` | zstd JSON, album key → images | Album contents, search |
-| `.smugmug_db/props.json` | JSON | Last sync times |
+| `.smugmug_db/props.json` | JSON | Last sync times, and `db_version` (checked on open, see below) |
 | `.smugmug_db/video_info/*.parquet` | parquet | Video file extension, size and duration |
 | `.smugmug_db/image_metadata/*.parquet` | parquet | Date taken, camera, dimensions, GPS, full EXIF JSON |
 | `artifacts/<ImageKey>` | image as uploaded (no extension) | Photos, their embedded EXIF, and video poster frames |
@@ -92,6 +92,20 @@ The codecs shown are those of the file in the archive: SmugMug's MP4 rendition, 
 originally uploaded `.wmv`, `.mpg` or `.3gp`.
 
 Folders the syncer doesn't manage, such as `recovered/`, are ignored.
+
+### Database version
+
+`props.json` records `db_version`, the [semver](https://semver.org/) version of the syncer's
+`.smugmug_db` layout. The viewer supports the version in
+[src/archive/db_version.rs](src/archive/db_version.rs) (`SUPPORTED_DB_VERSION`, currently
+`1.0.0`) and, when opening an archive:
+
+| Archive's `db_version` | Result |
+| --- | --- |
+| missing (archives synced before the version was recorded) | treated as `1.0.0` |
+| same major version, same or older minor | opens |
+| same major version, newer minor | opens, with a notice that some data may not be shown |
+| different major version (different minor while the major is `0`), or not a version | refused, with a message saying whether the viewer or the archive is too old |
 
 ## Project layout
 

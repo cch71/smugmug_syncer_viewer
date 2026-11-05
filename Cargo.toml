@@ -31,6 +31,7 @@ rfd = { version = "0.17", optional = true }
 # Web/PWA only
 gloo-net = { version = "0.7", default-features = false, features = ["http"], optional = true }
 web-sys = { version = "0.3", features = ["Window", "Location", "Url", "UrlSearchParams"], optional = true }
+semver = "1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

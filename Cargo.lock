@@ -5087,6 +5087,7 @@ dependencies = [
  "parquet",
  "rfd",
  "ruzstd",
+ "semver",
  "serde",
  "serde_json",
  "tokio",
