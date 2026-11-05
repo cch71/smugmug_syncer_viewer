@@ -1,6 +1,6 @@
 [package]
 name = "smugmug_syncer_viewer"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 authors = ["Craig Hamilton"]
 description = "Desktop (and PWA-ready) viewer for archives created by smugmug_syncer"

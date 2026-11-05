@@ -7,6 +7,8 @@ the new version number.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-05
+
 ### Added
 
 - Desktop viewer for `smugmug_syncer` archives: folder/album tree, album thumbnail grids,
@@ -16,4 +18,5 @@ the new version number.
 - Thumbnail cache in the OS cache directory, so the archive is never written to.
 - Web/PWA build (`dx build --platform web`) that reads an archive over HTTP.
 
-[Unreleased]: https://github.com/cch71/smugmug_syncer_viewer/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/cch71/smugmug_syncer_viewer/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/cch71/smugmug_syncer_viewer/releases/tag/v1.0.0
